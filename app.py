@@ -1,252 +1,571 @@
-import streamlit as st
-import sqlite3
-import pandas as pd
-import plotly.express as px
-import google.generativeai as genai
+# import os
 
-from ui import load_ui
-load_ui()
-# Gemini API key
-api_key="AIzaSyBGmfblE00s8i3AyPEy_O94fVe_55LOYSo"
-genai.configure(api_key=api_key)
+# import google.generativeai as genai
+# import streamlit as st
+# from streamlit.errors import StreamlitSecretNotFoundError
 
-model = genai.GenerativeModel("gemini-2.5-flash")
+# from chart_utils import create_chart, create_frequency_chart, choose_chart, render_metrics
+# from db_utils import TABLE_NAME, get_column_types, get_columns, run_query
+# from followup import is_followup_question, refine_query_plan
+# from metadata_handlers import (
+#     classify_intent,
+#     get_column_datatype,
+#     get_dataset_overview,
+#     get_null_count,
+#     get_sample_values,
+#     get_top_values,
+#     get_unique_count,
+# )
+# from planner import build_sql_from_plan, generate_query_plan, summarize_plan
+# from ui import load_ui
 
-def generate_sql(question):
-    prompt = f"""
-    Convert the following business question into SQL.
-
-    Table name: claims
-
-    Columns:
-    life_insurer
-    year
-    claims_pending_start_no
-    claims_pending_start_amt
-    claims_intimated_no
-    claims_intimated_amt
-    total_claims_no
-    total_claims_amt
-    claims_paid_no
-    claims_paid_amt
-    claims_repudiated_no
-    claims_repudiated_amt
-    claims_rejected_no
-    claims_rejected_amt
-    claims_unclaimed_no
-    claims_unclaimed_amt
-    claims_pending_end_no
-    claims_pending_end_amt
-    claims_paid_ratio_no
-    claims_paid_ratio_amt
-    claims_repudiated_rejected_ratio_no
-    claims_repudiated_rejected_ratio_amt
-    claims_pending_ratio_no
-    claims_pending_ratio_amt
-    category
-
-    Rules:
-    - Return only SQL
-    - No markdown
-    - No explanation
-    - Use table name claims
-    - Use AS for aggregate aliases
-
-    Question: {question}
-    """
-    response = model.generate_content(prompt)
-    sql = response.text.strip()
-    sql = sql.replace("```sql", "").replace("```", "").strip()
-    return sql
-
-def run_query(sql):
-    conn = sqlite3.connect("database.db")
-    df = pd.read_sql_query(sql, conn)
-    conn.close()
-    return df
-
-def choose_chart(df):
-    cols = list(df.columns)
-
-    if "year" in cols:
-        return "line"
-    elif len(cols) >= 2:
-        return "bar"
-    else:
-        return "table"
-    
-def create_chart(df, chart):
-    cols = list(df.columns)
-
-    if chart == "line":
-        if "year" in cols:
-            x_col = "year"
-            y_candidates = [c for c in cols if c != x_col and df[c].dtype != "object"]
-            color_candidates = [c for c in cols if c != x_col and df[c].dtype == "object"]
-
-            y_col = y_candidates[0] if y_candidates else None
-            color_col = color_candidates[0] if color_candidates else None
-
-            if y_col:
-                if color_col:
-                    fig = px.line(df, x=x_col, y=y_col, color=color_col, markers=True)
-                else:
-                    fig = px.line(df, x=x_col, y=y_col, markers=True)
-                fig.update_traces(
-                    line=dict(width=3),
-                    marker=dict(size=8)
-                )
-            else:
-                return None
-        else:
-            return None
-
-    elif chart == "bar":
-        cat_cols = [c for c in cols if df[c].dtype == "object"]
-        num_cols = [c for c in cols if df[c].dtype != "object"]
-
-        if len(cat_cols) >= 1 and len(num_cols) >= 1:
-            x_col = cat_cols[0]
-            y_col = num_cols[0]
-            fig = px.bar(df, x=x_col, y=y_col)
-        elif len(num_cols) >= 2:
-            fig = px.bar(df, x=num_cols[0], y=num_cols[1])
-        
-            fig.update_traces(
-            marker_line_width=0,
-            opacity=0.92
-            )
-        else:
-            return None
-
-    else:
-        return None
-
-    fig.update_layout(
-        dragmode="zoom",
-        xaxis_title=cols[0],
-        yaxis_title=cols[1] if len(cols) > 1 else "",
-        height=500
-    )
+# load_ui()
 
 
-    return fig
+# def load_api_key():
+#     # api_key = os.getenv("API_KEY")
+#     api_key="AIzaSyAw2_k0qnHySY6tO2GX1D3aCsRQJ3A6kpA"
+#     if api_key:
+#         return api_key
+
+#     try:
+#         return st.secrets["API_KEY"]
+#     except (StreamlitSecretNotFoundError, KeyError):
+#         return None
 
 
+# def validate_sql(sql):
+#     cleaned_sql = sql.strip().rstrip(";")
+#     lowered_sql = cleaned_sql.lower()
+
+#     if not lowered_sql.startswith("select"):
+#         raise ValueError("Only SELECT queries are allowed.")
+
+#     blocked_terms = [
+#         "insert",
+#         "update",
+#         "delete",
+#         "drop",
+#         "alter",
+#         "truncate",
+#         "attach",
+#         "pragma",
+#     ]
+#     if any(term in lowered_sql for term in blocked_terms):
+#         raise ValueError("Unsafe SQL was generated and blocked.")
+
+#     return cleaned_sql
 
 
+# api_key = load_api_key()
+
+# if api_key:
+#     genai.configure(api_key=api_key)
+#     model = genai.GenerativeModel("gemini-2.5-flash")
+# else:
+#     model = None
 
 
-# UI
-st.markdown('<div class="main-title">AI Business Intelligence Dashboard</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Ask plain-English questions and get instant interactive business insights.</div>', unsafe_allow_html=True)
+# if "last_plan" not in st.session_state:
+#     st.session_state.last_plan = None
+
+# if "last_question" not in st.session_state:
+#     st.session_state.last_question = None
+
+# if "last_sql" not in st.session_state:
+#     st.session_state.last_sql = None
 
 
-# question = st.text_input(
-#     "Ask a business question"
+# st.markdown('<div class="main-title">AI Business Intelligence Dashboard</div>', unsafe_allow_html=True)
+# st.markdown(
+#     '<div class="subtitle">Ask plain-English questions and get instant interactive business insights.</div>',
+#     unsafe_allow_html=True,
 # )
 
-st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-question = st.text_input("Ask a business question", placeholder="e.g. Show total claims paid amount by life insurer")
-st.markdown('<div class="helper-text">Try: "Show claims paid ratio by insurer" or "Compare repudiated claims by year"</div>', unsafe_allow_html=True)
-# generate = st.button("✨ Generate Dashboard")
-st.markdown('</div>', unsafe_allow_html=True)
+# st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+# question = st.text_input(
+#     "Ask a business question",
+#     placeholder="e.g. Show total claims paid amount by life insurer",
+# )
+# st.markdown(
+#     '<div class="helper-text">Try: "Show total claims paid amount by life insurer", then "Now only for 2023"</div>',
+#     unsafe_allow_html=True,
+# )
+# st.markdown("</div>", unsafe_allow_html=True)
 
+# with st.sidebar:
+#     st.markdown("## ⚡ Dashboard Controls")
+#     st.markdown("Ask questions about insurance claims data.")
+#     st.markdown("---")
+#     st.markdown("### Suggested Prompts")
+#     st.markdown("- Show total claims paid amount by life insurer")
+#     st.markdown("- Show claims paid ratio by year")
+#     st.markdown("- Compare pending claims by insurer")
+#     st.markdown("- What columns are in this dataset?")
+#     st.markdown("- What is the datatype of claims_paid_amt?")
+#     st.markdown("- Show top 10 values from life_insurer")
+#     st.markdown("- Now only for 2023")
+#     st.markdown("- Sort ascending")
+#     st.markdown("- Top 5 only")
+
+#     st.markdown("---")
+#     st.markdown("### Follow-up Context")
+#     if st.session_state.last_question:
+#         st.caption(f"Last dashboard query: {st.session_state.last_question}")
+#     else:
+#         st.caption("No dashboard context yet.")
+
+#     if st.button("Clear Follow-up Context"):
+#         st.session_state.last_plan = None
+#         st.session_state.last_question = None
+#         st.session_state.last_sql = None
+#         st.rerun()
+
+
+# if st.button("✨ Generate Dashboard"):
+#     if not question.strip():
+#         st.warning("Please enter a question first.")
+#     else:
+#         with st.spinner("Generating dashboard..."):
+#             try:
+#                 columns = get_columns()
+#                 intent = classify_intent(question, columns)
+
+#                 if intent == "schema":
+#                     row_count, schema_df = get_dataset_overview()
+#                     st.subheader("Dataset Overview")
+#                     st.info(f"This dataset has {row_count} rows and {len(schema_df)} columns.")
+#                     st.dataframe(schema_df, use_container_width=True)
+
+#                 elif intent == "sample_values":
+#                     column_name, limit, sql, df = get_sample_values(question)
+#                     st.subheader(f"Sample Values from {column_name}")
+#                     st.code(sql)
+#                     st.info(f"Showing up to {limit} distinct non-null values from `{column_name}`.")
+#                     st.dataframe(df, use_container_width=True)
+
+#                 elif intent == "column_type":
+#                     column_name, dtype = get_column_datatype(question)
+#                     st.subheader("Column Datatype")
+#                     st.success(f"`{column_name}` has datatype: **{dtype}**")
+
+#                 elif intent == "unique_count":
+#                     column_name, sql, unique_count = get_unique_count(question)
+#                     st.subheader("Unique Value Count")
+#                     st.code(sql)
+#                     st.success(f"`{column_name}` has **{unique_count}** unique values.")
+
+#                 elif intent == "null_count":
+#                     column_name, sql, null_count = get_null_count(question)
+#                     st.subheader("Null Value Count")
+#                     st.code(sql)
+#                     st.success(f"`{column_name}` has **{null_count}** null values.")
+
+#                 elif intent == "top_values":
+#                     column_name, limit, sql, df = get_top_values(question)
+#                     st.subheader(f"Top {limit} Values in {column_name}")
+#                     st.code(sql)
+#                     st.dataframe(df, use_container_width=True)
+
+#                     fig = create_frequency_chart(df, column_name, "frequency")
+#                     if fig is not None:
+#                         st.plotly_chart(fig, use_container_width=True)
+
+#                 else:
+#                     column_types = get_column_types()
+
+#                     if st.session_state.last_plan and is_followup_question(question):
+#                         plan = refine_query_plan(
+#                             question=question,
+#                             previous_plan=st.session_state.last_plan,
+#                             model=model,
+#                             table_name=TABLE_NAME,
+#                             column_types=column_types,
+#                         )
+#                         st.info(f"Applied as follow-up to: {st.session_state.last_question}")
+#                     else:
+#                         plan = generate_query_plan(
+#                             question=question,
+#                             model=model,
+#                             table_name=TABLE_NAME,
+#                             column_types=column_types,
+#                         )
+
+#                     sql = build_sql_from_plan(plan, TABLE_NAME)
+#                     sql = validate_sql(sql)
+
+#                     st.subheader("Query Plan")
+#                     st.json(plan)
+#                     st.caption(summarize_plan(plan))
+
+#                     st.subheader("Generated SQL")
+#                     st.code(sql)
+
+#                     df = run_query(sql)
+
+#                     st.session_state.last_plan = plan
+#                     st.session_state.last_question = question
+#                     st.session_state.last_sql = sql
+
+#                     if df.empty:
+#                         st.warning("The query ran successfully, but it returned no rows.")
+#                     else:
+#                         render_metrics(df)
+
+#                         st.subheader(plan.get("title", "Data"))
+#                         st.dataframe(df, use_container_width=True)
+
+#                         chart = plan.get("chart_type") or choose_chart(df)
+#                         fig = create_chart(df, chart)
+
+#                         if fig is not None:
+#                             st.plotly_chart(
+#                                 fig,
+#                                 use_container_width=True,
+#                                 config={
+#                                     "displaylogo": False,
+#                                     "toImageButtonOptions": {
+#                                         "format": "png",
+#                                         "filename": "dashboard_chart",
+#                                         "height": 600,
+#                                         "width": 1000,
+#                                         "scale": 2,
+#                                     },
+#                                 },
+#                             )
+#                         else:
+#                             st.warning("Could not create chart for this result.")
+
+#             except Exception as e:
+#                 st.error(f"Request failed: {e}")
+
+import os
+
+import google.generativeai as genai
+import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
+
+from chart_utils import create_chart, create_frequency_chart, choose_chart, render_metrics
+from dataset_manager import list_tables, preview_table, save_uploaded_csv
+from db_utils import DEFAULT_TABLE, get_column_types, get_columns, get_row_count, run_query
+from followup import is_followup_question, refine_query_plan
+from metadata_handlers import (
+    classify_intent,
+    get_column_datatype,
+    get_dataset_overview,
+    get_null_count,
+    get_sample_values,
+    get_top_values,
+    get_unique_count,
+)
+from planner import build_sql_from_plan, generate_query_plan, summarize_plan
+from state_manager import (
+    clear_followup_context,
+    get_active_table,
+    get_last_plan,
+    get_last_question,
+    init_session_state,
+    set_active_table,
+    set_last_plan,
+    set_last_question,
+    set_last_sql,
+)
+from ui import load_ui
+
+load_ui()
+init_session_state()
+
+from error_handlers import format_user_error
+from insight_generator import generate_result_highlights, generate_result_summary
+from schema_utils import get_schema_profile
+
+
+def load_api_key():
+    api_key = os.getenv("API_KEY")
+    api_key="AIzaSyAR6_2DNwHP0X1brpz8-RKottIXyUDWK28"
+    if api_key:
+        return api_key
+
+    try:
+        return st.secrets["API_KEY"]
+    except (StreamlitSecretNotFoundError, KeyError):
+        return None
+
+
+def validate_sql(sql):
+    cleaned_sql = sql.strip().rstrip(";")
+    lowered_sql = cleaned_sql.lower()
+
+    if not lowered_sql.startswith("select"):
+        raise ValueError("Only SELECT queries are allowed.")
+
+    blocked_terms = [
+        "insert",
+        "update",
+        "delete",
+        "drop",
+        "alter",
+        "truncate",
+        "attach",
+        "pragma",
+    ]
+    if any(term in lowered_sql for term in blocked_terms):
+        raise ValueError("Unsafe SQL was generated and blocked.")
+
+    return cleaned_sql
+
+
+api_key = load_api_key()
+
+if api_key:
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+else:
+    model = None
+
+
+st.markdown('<div class="main-title">AI Business Intelligence Dashboard</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="subtitle">Ask plain-English questions and get instant interactive business insights.</div>',
+    unsafe_allow_html=True,
+)
+
+# Sidebar: dataset management
 with st.sidebar:
-    st.markdown("## ⚡ Dashboard Controls")
-    st.markdown("Ask questions about insurance claims data.")
+    st.markdown("## 📁 Dataset Manager")
+
+    uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
+
+    if uploaded_file is not None:
+        if st.button("Load Uploaded CSV"):
+            try:
+                table_name, df_uploaded = save_uploaded_csv(uploaded_file)
+                set_active_table(table_name)
+                clear_followup_context()
+                st.success(f"Loaded dataset as table: `{table_name}`")
+                st.dataframe(df_uploaded.head(5), use_container_width=True)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Upload failed: {e}")
+
+    available_tables = list_tables()
+    if DEFAULT_TABLE not in available_tables:
+        available_tables = [DEFAULT_TABLE] + available_tables
+
+    current_active = get_active_table()
+    if current_active not in available_tables:
+        current_active = DEFAULT_TABLE
+        set_active_table(current_active)
+
+    selected_table = st.selectbox(
+        "Select active dataset",
+        options=available_tables,
+        index=available_tables.index(current_active),
+    )
+
+    if selected_table != current_active:
+        set_active_table(selected_table)
+        clear_followup_context()
+        st.rerun()
+
+    active_table = get_active_table()
+
+    st.markdown("---")
+    st.markdown("### Active Dataset")
+    st.caption(f"Table: `{active_table}`")
+
+    try:
+        row_count = get_row_count(active_table)
+        columns = get_columns(active_table)
+        st.caption(f"Rows: {row_count}")
+        st.caption(f"Columns: {len(columns)}")
+    except Exception:
+        st.caption("Could not load dataset metadata.")
+
+    if st.button("Preview Active Dataset"):
+        try:
+            preview_df = preview_table(active_table, limit=10)
+            st.dataframe(preview_df, use_container_width=True)
+        except Exception as e:
+            st.error(f"Preview failed: {e}")
+
     st.markdown("---")
     st.markdown("### Suggested Prompts")
+    st.markdown("- What columns are in this dataset?")
+    st.markdown("- What is the datatype of claims_paid_amt?")
+    st.markdown("- Show top 10 values from life_insurer")
     st.markdown("- Show total claims paid amount by life insurer")
-    st.markdown("- Show claims paid ratio by year")
-    st.markdown("- Compare pending claims by insurer")
-    st.markdown("- Show repudiated claims trend")
+    st.markdown("- Now only for 2023")
+    st.markdown("- Top 5 only")
 
+    st.markdown("---")
+    st.markdown("### Follow-up Context")
+    if get_last_question():
+        st.caption(f"Last dashboard query: {get_last_question()}")
+    else:
+        st.caption("No dashboard context yet.")
+
+    if st.button("Clear Follow-up Context"):
+        clear_followup_context()
+        st.rerun()
+
+st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+question = st.text_input(
+    "Ask a business question",
+    placeholder="e.g. Show total claims paid amount by life insurer",
+)
+st.markdown(
+    f'<div class="helper-text">Current dataset: <b>{get_active_table()}</b>. Try: "Show total claims paid amount by life insurer", then "Now only for 2023"</div>',
+    unsafe_allow_html=True,
+)
+st.markdown("</div>", unsafe_allow_html=True)
 
 
 if st.button("✨ Generate Dashboard"):
+    if not question.strip():
+        st.warning("Please enter a question first.")
+    else:
+        with st.spinner("Generating dashboard..."):
+            try:
+                active_table = get_active_table()
+                columns = get_columns(active_table)
+                intent = classify_intent(question, columns)
 
-    with st.spinner("Generating dashboard..."):
+                if intent == "schema":
+                    row_count, schema_df = get_dataset_overview(active_table)
+                    st.subheader("Dataset Overview")
+                    st.info(
+                        f"Active dataset `{active_table}` has {row_count} rows and {len(schema_df)} columns."
+                    )
+                    st.dataframe(schema_df, use_container_width=True)
 
-        sql = generate_sql(question)
+                elif intent == "sample_values":
+                    column_name, limit, sql, df = get_sample_values(question, active_table)
+                    st.subheader(f"Sample Values from {column_name}")
+                    st.code(sql)
+                    st.info(f"Showing up to {limit} distinct non-null values from `{column_name}`.")
+                    st.dataframe(df, use_container_width=True)
 
-        
+                elif intent == "column_type":
+                    column_name, dtype = get_column_datatype(question, active_table)
+                    st.subheader("Column Datatype")
+                    st.success(f"`{column_name}` has datatype: **{dtype}**")
 
-        st.subheader("Generated SQL")
-        st.code(sql)
+                elif intent == "unique_count":
+                    column_name, sql, unique_count = get_unique_count(question, active_table)
+                    st.subheader("Unique Value Count")
+                    st.code(sql)
+                    st.success(f"`{column_name}` has **{unique_count}** unique values.")
 
-        try:
+                elif intent == "null_count":
+                    column_name, sql, null_count = get_null_count(question, active_table)
+                    st.subheader("Null Value Count")
+                    st.code(sql)
+                    st.success(f"`{column_name}` has **{null_count}** null values.")
 
-            df = run_query(sql)
+                elif intent == "top_values":
+                    column_name, limit, sql, df = get_top_values(question, active_table)
+                    st.subheader(f"Top {limit} Values in {column_name}")
+                    st.code(sql)
+                    st.dataframe(df, use_container_width=True)
 
-            numeric_cols = df.select_dtypes(include="number").columns.tolist()
+                    summary = generate_result_summary(df, {"chart_type": "bar"})
+                    if summary:
+                        st.success(summary)
 
-            if len(df) > 0:
-                k1, k2, k3 = st.columns(3)
+                    fig = create_frequency_chart(df, column_name, "frequency")
+                    if fig is not None:
+                        st.plotly_chart(fig, use_container_width=True)
 
-                with k1:
-                    st.markdown(f"""
-                    <div class="metric-pill">
-                        <div class="metric-label">Rows Returned</div>
-                        <div class="metric-value">{len(df)}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                else:
+                    schema_profile = get_schema_profile(active_table)
+                    column_types = {col["name"]: col["type"] for col in schema_profile["columns"]}
 
-                with k2:
-                    first_col = df.columns[0]
-                    unique_count = df[first_col].nunique() if first_col in df.columns else 0
-                    st.markdown(f"""
-                    <div class="metric-pill">
-                        <div class="metric-label">Unique {first_col}</div>
-                        <div class="metric-value">{unique_count}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                with k3:
-                    if numeric_cols:
-                        total_val = round(df[numeric_cols[0]].sum(), 2)
-                        st.markdown(f"""
-                        <div class="metric-pill">
-                            <div class="metric-label">Total {numeric_cols[0]}</div>
-                            <div class="metric-value">{total_val}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    last_plan = get_last_plan()
+                    if last_plan and is_followup_question(question):
+                        plan = refine_query_plan(
+                            question=question,
+                            previous_plan=last_plan,
+                            model=model,
+                            table_name=active_table,
+                            column_types=column_types,
+                            schema_profile=schema_profile,
+                        )
+                        st.info(f"Applied as follow-up to: {get_last_question()}")
                     else:
-                        st.markdown(f"""
-                        <div class="metric-pill">
-                            <div class="metric-label">Numeric Summary</div>
-                            <div class="metric-value">N/A</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        plan = generate_query_plan(
+                            question=question,
+                            model=model,
+                            table_name=active_table,
+                            column_types=column_types,
+                            schema_profile=schema_profile,
+                        )
 
-                    st.markdown("<br>", unsafe_allow_html=True)
+                    sql = build_sql_from_plan(plan, active_table)
+                    sql = validate_sql(sql)
 
-            st.subheader("Data")
-            st.dataframe(df)
+                    st.subheader("Query Plan")
+                    st.json(plan)
+                    st.caption(summarize_plan(plan))
 
-            chart = choose_chart(df)
+                    st.subheader("Generated SQL")
+                    st.code(sql)
 
-            fig = create_chart(df, chart)
+                    df = run_query(sql)
 
-            if fig is not None:
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True,
-                    config={
-                        "displaylogo": False,
-                        "toImageButtonOptions": {
-                            "format": "png",
-                            "filename": "dashboard_chart",
-                            "height": 600,
-                            "width": 1000,
-                            "scale": 2
-                        }
-                    }
+                    set_last_plan(plan)
+                    set_last_question(question)
+                    set_last_sql(sql)
+
+                    if df.empty:
+                        st.warning("The query ran successfully, but it returned no rows.")
+                    else:
+                        render_metrics(df)
+
+                        st.subheader(plan.get("title", "Data"))
+                        st.dataframe(df, use_container_width=True)
+
+                        summary = generate_result_summary(df, plan)
+                        if summary:
+                            st.success(summary)
+
+                        highlights = generate_result_highlights(df, plan)
+                        for item in highlights:
+                            st.markdown(f"- {item}")
+
+                        chart = plan.get("chart_type") or choose_chart(df)
+                        fig = create_chart(df, chart)
+
+                        if fig is not None:
+                            st.plotly_chart(
+                                fig,
+                                use_container_width=True,
+                                config={
+                                    "displaylogo": False,
+                                    "toImageButtonOptions": {
+                                        "format": "png",
+                                        "filename": "dashboard_chart",
+                                        "height": 600,
+                                        "width": 1000,
+                                        "scale": 2,
+                                    },
+                                },
+                            )
+                        else:
+                            st.warning("Could not create chart for this result.")
+
+            except Exception as e:
+                active_table_name = get_active_table()
+                available_columns = []
+                try:
+                    available_columns = get_columns(active_table_name)
+                except Exception:
+                    pass
+
+                st.error(
+                    format_user_error(
+                        error=e,
+                        active_table=active_table_name,
+                        columns=available_columns,
+                    )
                 )
-            else:
-                st.warning("Could not create chart for this result.")
-
-
-
-        except Exception as e:
-            st.error(f"Query execution failed: {e}")
